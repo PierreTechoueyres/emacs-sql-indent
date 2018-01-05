@@ -7,10 +7,7 @@
 ;; Author: pierre.techoueyres@free.fr
 ;; Maintainer: pierre.techoueyres@free.fr
 ;; Created:
-;; Version: pierre.techoueyres@free.fr
-;; Last-Updated:
-;;           By:
-;;     Update #: 0
+;; Version:
 ;; URL:
 ;; Keywords: language sql indentation
 ;; Compatibility:
@@ -260,7 +257,7 @@ and    not exists (select 1
 delete from my_table mt
 where col_1 = v_col1
 and  (   col_2 = v_col2
-       or col_3 = v_col3)
+      or col_3 = v_col3)
 and   col_42 = '42'
 ;
 
@@ -269,7 +266,7 @@ set    col1_has_a_long_name = value1,
        col2_is_short        = value2
 where cond1 is not null
 and  (   col_2 = v_col2
-       or col_3 = v_col3)
+      or col_3 = v_col3)
 and   col_42 = '42'
 ;
 
@@ -283,22 +280,22 @@ select aaa,
        min (m.b1) as ccc,
        coalesce (max (n.c2), 0)  as ddd,
        coalesce (min (n.c2), 0)  as eee,
-       max (m.b1) over ( partition by c2
-                         order by aaa desc ) as fff,
-       min (m.b1) over ( partition by c2
-                         order by aaa desc ) as ggg,
+       max (m.b1) over (partition by c2
+                        order by aaa desc ) as fff,
+       min (m.b1) over (partition by c2
+                        order by aaa desc ) as ggg,
        avg (n.c2) as hhh
 from  (select * from (select aaa,
                              jjj + kkk  as b1,
-                             row_number () over ( partition by qqq
-                                                  order by rrr,
-                                                  sss ) as rn
+                             row_number () over (partition by qqq
+                                                 order by rrr,
+                                                 sss ) as rn
                       from mno)
        where rn = 1) m
-        inner join (select aaa,
-                           nnn + ooo as c2
-                    from   pqr) n
-        using (aaa),
+  inner join (select aaa,
+                     nnn + ooo as c2
+              from   pqr) n
+  using (aaa),
 group by aaa,
          xxx
 order by xxx desc,
