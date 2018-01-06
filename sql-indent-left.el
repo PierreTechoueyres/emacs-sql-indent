@@ -74,31 +74,68 @@ or ((block-start else) (in-block case \"\") ...)."
         (+ base-indentation sqlind-basic-offset)
       base-indentation)))
 
-(defvar sqlind-indentation-right-offsets-alist
-  `((select-column-continuation sqlind-indent-select-column
-                                sqlind-adjust-operator
-                                sqlind-lone-semicolon)
-    (in-select-clause sqlind-lineup-to-clause-end
-                      sqlind-adjust-operator
-		      sqlind-right-justify-logical-operator
-		      sqlind-lone-semicolon)
-    (in-delete-clause sqlind-lineup-to-clause-end
-                      sqlind-adjust-operator
-		      sqlind-right-justify-logical-operator
-		      sqlind-lone-semicolon)
-    (in-insert-clause sqlind-lineup-to-clause-end
-                      sqlind-adjust-operator
-		      sqlind-right-justify-logical-operator
-		      sqlind-lone-semicolon)
-    (in-update-clause sqlind-lineup-to-clause-end
-                      sqlind-adjust-operator
-		      sqlind-right-justify-logical-operator
-		      sqlind-lone-semicolon)
-    ;; mandatory
-    (select-table-continuation sqlind-indent-select-table +
-                               sqlind-lone-semicolon)
-    ;; rest picked up from the original indentation offsets
-    ,@sqlind-default-indentation-offsets-alist)
+(defun sqlind-indent-select-column-alt (syntax base-indentation)
+  "Return the indentation for a column after a SELECT DISTINCT clause.
+
+SYNTAX is the syntax of the current line, BASE-INDENTATION is the
+current indentation, which we need to update.
+
+Like `sqlind-indent-select-column' but we try to align to the KEYWORD,
+but if we are the first column after the SELECT clause we simply
+add `sqlind-basic-offset'."
+  (save-excursion
+    (goto-char (sqlind-anchor-point syntax))
+    (when (looking-at "select\\s *\\(top\\s +[0-9]+\\|distinct\\|unique\\)?")
+      (if (match-beginning 1)
+	  (goto-char (match-beginning 1))
+	(goto-char (match-end 0))))
+    (skip-syntax-forward " ")
+    (if (or (looking-at sqlind-comment-start-skip)
+	    (looking-at "$"))
+	(+ base-indentation sqlind-basic-offset)
+      (current-column))))
+
+;;;###autoload
+(defun sqlind-setup-style-default ()
+  "Define an sql-indentation style where keywords are right aligned."
+  (interactive)
+  (setq sqlind-indentation-offsets-alist sqlind-default-indentation-offsets-alist))
+
+(defmacro sqlind-create-derived-style (name parent &optional docstring &rest body)
+  "Create a new style for `sqlind-minor-mode' derived from the one defined by PARENT.
+
+The arguments to this command are as follow:
+
+NAME: the name of the new style.
+PARENT: then name of the original style or nil if there is no parent.
+DOCSTRING: an optionnal docstring or example of the expected result.
+BODY: the body for the style see `sqlind-default-indentation-offsets-alist' for details."
+  (declare (doc-string 3)
+  	   (indent 2))
+
+  (when (and docstring (not (stringp docstring)))
+    ;; Some trickiness, since what appears to be the docstring may really be
+    ;; the first element of the body.
+    (push docstring body)
+    (setq docstring nil))
+
+  ;; `(when (not (listp ,parent)) (setq parent nil))
+
+  (let* ((style-name (symbol-name name))
+	 (style-var-name (intern (concat "sqlind-indentation-" style-name "-offsets-alist"))))
+    `(progn
+       ;; first create an empty var
+       (defvar ,style-var-name nil
+	 ,(format "Body to indent SQL statements for the style `%s'.\n\n%s" style-name docstring))
+       (setq ,style-var-name '(,@body ,@(eval `,parent)))
+
+       (defun ,(intern (concat "sqlind-setup-style-" style-name)) ()
+	 ,(format "Define an sql-indentation style where keywords are aligned corresponding to `%s'." style-name)
+	 (interactive)
+	 (setq sqlind-indentation-offsets-alist ,style-var-name)))))
+
+;;;###autoload
+(sqlind-create-derived-style left sqlind-default-indentation-offsets-alist
   "Align sql code like this :
 
 clear columns
@@ -177,50 +214,49 @@ select aaa,
           xxx
  order by xxx desc,
           aaa asc
- ;")
+ ;"
+  (select-clause 0)
+  (insert-clause 0)
+  (delete-clause 0)
+  (update-clause 0)
+  (case-clause-item-cont 0)
+  (block-start indent-case-statement-items)
+  (begin-block 0)
+  (case-clause +)
+  (package +)
+  (package-body +)
+  (statement-continuation + sqlind-adjust-operator)
+  (nested-statement-open         1)
+  (nested-statement-continuation 1)
+  (nested-statement-close        sqlind-use-anchor-indentation)
+  (string-continuation 0) ;; or should it be a beginning of line or aligned with the previous block ?
+  ;; Anyway. It's really *BAD* to continue a string across lines.
+  (select-column sqlind-indent-select-column-alt
+		 sqlind-adjust-operator
+		 sqlind-lone-semicolon)
+  (select-column-continuation sqlind-indent-select-column-alt
+			      sqlind-adjust-operator
+			      sqlind-lone-semicolon)
+  (in-select-clause sqlind-lineup-to-clause-end
+		    sqlind-adjust-operator
+		    sqlind-left-justify-logical-operator
+		    sqlind-lone-semicolon)
+  (in-delete-clause sqlind-lineup-to-clause-end
+		    sqlind-adjust-operator
+		    sqlind-left-justify-logical-operator
+		    sqlind-lone-semicolon)
+  (in-insert-clause +
+		    sqlind-adjust-operator
+		    sqlind-left-justify-logical-operator
+		    sqlind-lone-semicolon)
+  (in-update-clause sqlind-lineup-to-clause-end
+		    sqlind-adjust-operator
+		    sqlind-left-justify-logical-operator
+		    sqlind-lone-semicolon)
+  (select-table-continuation + sqlind-lone-semicolon))
 
-(defvar sqlind-indentation-left-offsets-alist
-  `((select-clause 0)
-    (insert-clause 0)
-    (delete-clause 0)
-    (update-clause 0)
-    (case-clause-item-cont 0)
-    (block-start indent-case-statement-items)
-    (begin-block 0)
-    (case-clause +)
-    (package +)
-    (package-body +)
-    (statement-continuation + sqlind-adjust-operator)
-    (nested-statement-open         1)
-    (nested-statement-continuation 1)
-    (nested-statement-close        sqlind-use-anchor-indentation)
-    (string-continuation 0) ;; or should it be a beginning of line or aligned with the previous block ?
-                            ;; Anyway. It's really *BAD* to continue a string across lines.
-    (select-column sqlind-indent-select-column-alt
-		   sqlind-adjust-operator
-		   sqlind-lone-semicolon)
-    (select-column-continuation sqlind-indent-select-column-alt
-                                sqlind-adjust-operator
-                                sqlind-lone-semicolon)
-    (in-select-clause sqlind-lineup-to-clause-end
-                      sqlind-adjust-operator
-		      sqlind-left-justify-logical-operator
-                      sqlind-lone-semicolon)
-    (in-delete-clause sqlind-lineup-to-clause-end
-                      sqlind-adjust-operator
-		      sqlind-left-justify-logical-operator
-                      sqlind-lone-semicolon)
-    (in-insert-clause +
-                      sqlind-adjust-operator
-		      sqlind-left-justify-logical-operator
-                      sqlind-lone-semicolon)
-    (in-update-clause sqlind-lineup-to-clause-end
-                      sqlind-adjust-operator
-		      sqlind-left-justify-logical-operator
-                      sqlind-lone-semicolon)
-    (select-table-continuation + sqlind-lone-semicolon)
-    ;; rest picked up from the original indentation offsets
-    ,@sqlind-default-indentation-offsets-alist)
+;;;###autoload
+(sqlind-create-derived-style right sqlind-default-indentation-offsets-alist
   "Align sql code like this :
 
 clear columns
@@ -300,48 +336,29 @@ group by aaa,
          xxx
 order by xxx desc,
          aaa asc
-;")
-
-(defun sqlind-indent-select-column-alt (syntax base-indentation)
-  "Return the indentation for a column after a SELECT DISTINCT clause.
-
-SYNTAX is the syntax of the current line, BASE-INDENTATION is the
-current indentation, which we need to update.
-
-Like `sqlind-indent-select-column' but we try to align to the KEYWORD,
-but if we are the first column after the SELECT clause we simply
-add `sqlind-basic-offset'."
-  (save-excursion
-    (goto-char (sqlind-anchor-point syntax))
-    (when (looking-at "select\\s *\\(top\\s +[0-9]+\\|distinct\\|unique\\)?")
-      (if (match-beginning 1)
-	  (goto-char (match-beginning 1))
-	(goto-char (match-end 0))))
-    (skip-syntax-forward " ")
-    (if (or (looking-at sqlind-comment-start-skip)
-	    (looking-at "$"))
-	(+ base-indentation sqlind-basic-offset)
-      (current-column))))
-
-;;;###autoload
-(defun sqlind-setup-style-left ()
-  "Define an sql-indentation style where keywords are left aligned."
-  (interactive)
-  (setq sqlind-indentation-offsets-alist sqlind-indentation-left-offsets-alist))
-
-;;;###autoload
-(defun sqlind-setup-style-right ()
-  "Define an sql-indentation style where keywords are right aligned."
-  (interactive)
-  (setq sqlind-indentation-offsets-alist sqlind-indentation-right-offsets-alist))
-
-
-;;;###autoload
-(defun sqlind-setup-style-default ()
-  "Define an sql-indentation style where keywords are right aligned."
-  (interactive)
-  (setq sqlind-indentation-offsets-alist sqlind-default-indentation-offsets-alist))
-
+;"
+  (select-column-continuation sqlind-indent-select-column
+			      sqlind-adjust-operator
+			      sqlind-lone-semicolon)
+  (in-select-clause sqlind-lineup-to-clause-end
+		    sqlind-adjust-operator
+		    sqlind-right-justify-logical-operator
+		    sqlind-lone-semicolon)
+  (in-delete-clause sqlind-lineup-to-clause-end
+		    sqlind-adjust-operator
+		    sqlind-right-justify-logical-operator
+		    sqlind-lone-semicolon)
+  (in-insert-clause sqlind-lineup-to-clause-end
+		    sqlind-adjust-operator
+		    sqlind-right-justify-logical-operator
+		    sqlind-lone-semicolon)
+  (in-update-clause sqlind-lineup-to-clause-end
+		    sqlind-adjust-operator
+		    sqlind-right-justify-logical-operator
+		    sqlind-lone-semicolon)
+  ;; mandatory
+  (select-table-continuation sqlind-indent-select-table +
+			     sqlind-lone-semicolon))
 
 (provide 'sql-indent-left)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
